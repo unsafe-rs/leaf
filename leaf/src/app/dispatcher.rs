@@ -154,7 +154,7 @@ impl Dispatcher {
             h
         } else {
             // FIXME use  the default handler
-            warn!("handler not found");
+            warn!("handler not found for outbound tag {}", &outbound);
             if let Err(e) = lhs.shutdown().await {
                 debug!(
                     "tcp downlink {} <- {} error: {}",

@@ -60,7 +60,6 @@ pub fn run_leaf_instances(
         let config = leaf::config::json::from_string(&config).unwrap();
         let opts = leaf::StartOptions {
             config: leaf::Config::Internal(config),
-            #[cfg(feature = "auto-reload")]
             auto_reload: false,
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
@@ -110,7 +109,10 @@ pub async fn new_socks_stream(socks_addr: &str, socks_port: u16, sess: &Session)
         .unwrap();
     timeout(
         Duration::from_secs(2),
-        handler.stream().unwrap().handle(sess, Some(Box::new(stream))),
+        handler
+            .stream()
+            .unwrap()
+            .handle(sess, Some(Box::new(stream))),
     )
     .await
     .unwrap()
@@ -490,7 +492,7 @@ pub fn test_data_transfering_reliability_on_configs(
             recvd_bytes += n;
         }
         for data in recvd_data.into_iter() {
-            dst_file.write(&data).await.unwrap();
+            let _ = dst_file.write(&data).await.unwrap();
         }
         dst_file.sync_all().await.unwrap();
         assert_eq!(
@@ -597,7 +599,7 @@ pub fn test_data_transfering_reliability_on_configs(
             recvd_bytes += n;
         }
         for data in recvd_data.into_iter() {
-            dst_file.write(&data).await.unwrap();
+            let _ = dst_file.write(&data).await.unwrap();
         }
         dst_file.sync_all().await.unwrap();
         assert_eq!(

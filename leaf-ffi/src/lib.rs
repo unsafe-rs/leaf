@@ -65,7 +65,6 @@ pub extern "C" fn leaf_run_with_options(
         if let Err(e) = leaf::util::run_with_options(
             rt_id,
             config_path.to_string(),
-            #[cfg(feature = "auto-reload")]
             auto_reload,
             multi_thread,
             auto_threads,
@@ -93,7 +92,6 @@ pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char) -> i32 {
     if let Ok(config_path) = unsafe { CStr::from_ptr(config_path).to_str() } {
         let opts = leaf::StartOptions {
             config: leaf::Config::File(config_path.to_string()),
-            #[cfg(feature = "auto-reload")]
             auto_reload: false,
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
@@ -111,7 +109,6 @@ pub extern "C" fn leaf_run_with_config_string(rt_id: u16, config: *const c_char)
     if let Ok(config) = unsafe { CStr::from_ptr(config).to_str() } {
         let opts = leaf::StartOptions {
             config: leaf::Config::Str(config.to_string()),
-            #[cfg(feature = "auto-reload")]
             auto_reload: false,
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };

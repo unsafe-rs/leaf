@@ -10,7 +10,7 @@ use regex::Regex;
 
 use crate::config::{external_rule, internal};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Tun {
     pub name: Option<String>,
     pub address: Option<String>,
@@ -19,7 +19,7 @@ pub struct Tun {
     pub mtu: Option<i32>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct General {
     pub tun: Option<Tun>,
     pub tun_fd: Option<i32>,
@@ -39,7 +39,7 @@ pub struct General {
     pub routing_domain_resolve: Option<bool>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proxy {
     pub tag: String,
     pub protocol: String,
@@ -98,7 +98,7 @@ impl Default for Proxy {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProxyGroup {
     pub tag: String,
     pub protocol: String,
@@ -147,14 +147,14 @@ impl Default for ProxyGroup {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Rule {
     pub type_field: String,
     pub filter: Option<String>,
     pub target: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     pub general: Option<General>,
     pub proxy: Option<Vec<Proxy>>,

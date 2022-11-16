@@ -1,6 +1,7 @@
 use super::common;
 use super::option;
 
+#[derive(Default)]
 pub struct NetInfo {
     pub default_ipv4_gateway: Option<String>,
     pub default_ipv6_gateway: Option<String>,
@@ -9,20 +10,6 @@ pub struct NetInfo {
     pub ipv4_forwarding: bool,
     pub ipv6_forwarding: bool,
     pub default_interface: Option<String>,
-}
-
-impl Default for NetInfo {
-    fn default() -> Self {
-        Self {
-            default_ipv4_gateway: None,
-            default_ipv6_gateway: None,
-            default_ipv4_address: None,
-            default_ipv6_address: None,
-            ipv4_forwarding: false,
-            ipv6_forwarding: false,
-            default_interface: None,
-        }
-    }
 }
 
 pub fn get_net_info() -> NetInfo {

@@ -17,7 +17,7 @@ use crate::{
 
 fn get_start_options(
     config_path: String,
-    #[cfg(feature = "auto-reload")] auto_reload: bool,
+    auto_reload: bool,
     multi_thread: bool,
     auto_threads: bool,
     threads: usize,
@@ -26,7 +26,6 @@ fn get_start_options(
     if !multi_thread {
         return crate::StartOptions {
             config: crate::Config::File(config_path),
-            #[cfg(feature = "auto-reload")]
             auto_reload,
             runtime_opt: crate::RuntimeOption::SingleThread,
         };
@@ -34,14 +33,12 @@ fn get_start_options(
     if auto_threads {
         return crate::StartOptions {
             config: crate::Config::File(config_path),
-            #[cfg(feature = "auto-reload")]
             auto_reload,
             runtime_opt: crate::RuntimeOption::MultiThreadAuto(stack_size),
         };
     }
     crate::StartOptions {
         config: crate::Config::File(config_path),
-        #[cfg(feature = "auto-reload")]
         auto_reload,
         runtime_opt: crate::RuntimeOption::MultiThread(threads, stack_size),
     }
@@ -50,7 +47,7 @@ fn get_start_options(
 pub fn run_with_options(
     rt_id: crate::RuntimeId,
     config_path: String,
-    #[cfg(feature = "auto-reload")] auto_reload: bool,
+    auto_reload: bool,
     multi_thread: bool,
     auto_threads: bool,
     threads: usize,
@@ -58,7 +55,6 @@ pub fn run_with_options(
 ) -> Result<(), crate::Error> {
     let opts = get_start_options(
         config_path,
-        #[cfg(feature = "auto-reload")]
         auto_reload,
         multi_thread,
         auto_threads,

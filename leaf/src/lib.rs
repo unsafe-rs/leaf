@@ -38,6 +38,7 @@ pub mod util;
 #[cfg(any(target_os = "ios", target_os = "macos", target_os = "android"))]
 pub mod mobile;
 
+pub mod relay;
 #[cfg(all(feature = "inbound-tun", any(target_os = "macos", target_os = "linux")))]
 mod sys;
 
@@ -354,15 +355,12 @@ pub struct StartOptions {
     // The path of the config.
     pub config: Config,
     // Enable auto reload, take effect only when "auto-reload" feature is enabled.
-    #[cfg(feature = "auto-reload")]
     pub auto_reload: bool,
     // Tokio runtime options.
     pub runtime_opt: RuntimeOption,
 }
 
 pub fn start(rt_id: RuntimeId, opts: StartOptions) -> Result<(), Error> {
-    println!("start with options:\n{:#?}", opts);
-
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
@@ -595,7 +593,6 @@ Direct = direct
             thread::spawn(move || {
                 let opts = StartOptions {
                     config: Config::Str(conf.to_string()),
-                    #[cfg(feature = "auto-reload")]
                     auto_reload: false,
                     runtime_opt: RuntimeOption::SingleThread,
                 };

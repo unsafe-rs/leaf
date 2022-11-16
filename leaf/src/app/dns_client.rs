@@ -178,21 +178,19 @@ impl DnsClient {
         let socket = if is_direct {
             let socket = self.new_udp_socket(server).await?;
             Box::new(StdOutboundDatagram::new(socket))
-        } else {
-            if let Some(dispatcher_weak) = self.dispatcher.as_ref() {
-                let sess = Session {
-                    network: Network::Udp,
-                    destination: SocksAddr::from(server),
-                    ..Default::default()
-                };
-                if let Some(dispatcher) = dispatcher_weak.upgrade() {
-                    dispatcher.dispatch_datagram(sess).await?
-                } else {
-                    return Err(anyhow!("dispatcher is deallocated"));
-                }
+        } else if let Some(dispatcher_weak) = self.dispatcher.as_ref() {
+            let sess = Session {
+                network: Network::Udp,
+                destination: SocksAddr::from(server),
+                ..Default::default()
+            };
+            if let Some(dispatcher) = dispatcher_weak.upgrade() {
+                dispatcher.dispatch_datagram(sess).await?
             } else {
-                return Err(anyhow!("could not find a dispatcher"));
+                return Err(anyhow!("dispatcher is deallocated"));
             }
+        } else {
+            return Err(anyhow!("could not find a dispatcher"));
         };
         let (mut r, mut s) = socket.split();
         let server = SocksAddr::from(server);
