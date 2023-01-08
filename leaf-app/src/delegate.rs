@@ -41,7 +41,7 @@ pub(crate) fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     app.tray_handle().set_menu(menu::build(settings.clone()))?;
 
     app.manage(CoreState {
-        rm: Arc::new(rm),
+        rm: Arc::new(Mutex::new(rm)),
         settings: Arc::new(Mutex::new(settings)),
     });
     Ok(())

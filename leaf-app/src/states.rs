@@ -1,23 +1,25 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use leaf::{app::router, relay::RelayManager};
-use tauri::{Manager, Result, Runtime};
+use log::info;
+use tauri::{api::path::home_dir, async_runtime::block_on, Manager, Result, Runtime};
 
 use crate::{setting, system};
 
 pub struct CoreState {
-    pub rm: Arc<RelayManager>,
+    pub rm: Arc<Mutex<RelayManager>>,
     pub settings: Arc<Mutex<setting::UserSettings>>,
 }
 
 #[tauri::command]
-pub async fn switch_mode_proxy<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    mode: router::Mode,
-) -> Result<()> {
+pub fn switch_mode_proxy<R: Runtime>(app: tauri::AppHandle<R>, mode: router::Mode) -> Result<()> {
     let state = app.state::<CoreState>();
     state.settings.lock().unwrap().outbound_mode = mode.to_string();
-    state.rm.route_manager().write().await.set_mode(mode);
+    let mut rm = state.rm.lock().unwrap();
+    block_on(rm.route_manager().write()).set_mode(mode);
 
     let h = app.tray_handle();
     h.get_item("mode_proxy")
@@ -65,12 +67,41 @@ pub fn toggle_system_proxy<R: Runtime>(app: tauri::AppHandle<R>) -> Result<()> {
 }
 
 #[tauri::command]
+pub fn reload_config<R: Runtime>(app: tauri::AppHandle<R>) -> Result<()> {
+    let state = app.state::<CoreState>();
+    let mut prev = state.settings.lock().unwrap();
+
+    let dst = Path::new(&home_dir().unwrap())
+        .join(".config")
+        .join("leaf-bud")
+        .join("bud.conf");
+    let next = setting::UserSettings::from_file(dst).unwrap();
+
+    prev.inner = next.inner;
+
+    state
+        .rm
+        .lock()
+        .unwrap()
+        .update_config(prev.to_owned().try_into().unwrap());
+    block_on(state.rm.lock().unwrap().reload()).unwrap();
+
+    info!("reload_config done");
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn switch_proxy<R: Runtime>(
     app: tauri::AppHandle<R>,
     outbound: &str,
     selected: &str,
 ) -> Result<()> {
     let state = app.state::<CoreState>();
-    state.rm.set_outbound_selected(outbound, selected);
+    state
+        .rm
+        .lock()
+        .unwrap()
+        .set_outbound_selected(outbound, selected);
     Ok(())
 }
