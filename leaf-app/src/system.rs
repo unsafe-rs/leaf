@@ -13,7 +13,7 @@ pub fn osascript() {
         .unwrap();
 }
 
-pub fn set_system_proxy(http_port: u16, socks_port: u16) -> anyhow::Result<()> {
+pub fn set_system_proxy(http_port: Option<u16>, socks_port: Option<u16>) -> anyhow::Result<()> {
     debug!("set_system_proxy");
     // #[cfg(target_os = "macos")]
     // {
@@ -35,7 +35,9 @@ pub fn set_system_proxy(http_port: u16, socks_port: u16) -> anyhow::Result<()> {
     Sysproxy {
         enable: true,
         host: "127.0.0.1".into(),
-        socks_port: Some(socks_port),
+        socks_port,
+        http_port,
+        https_port: http_port,
         ..Default::default()
     }
     .set_system_proxy()?;

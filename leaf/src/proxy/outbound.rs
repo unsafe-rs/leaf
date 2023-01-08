@@ -50,7 +50,7 @@ impl Tag for Handler {
 
 impl Color for Handler {
     fn color(&self) -> colored::Color {
-        (&self.color).to_owned()
+        self.color.to_owned()
     }
 }
 

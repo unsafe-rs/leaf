@@ -7,7 +7,7 @@
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "leaf-app",
+    "productName": "Leaf Bud",
     "version": "0.0.0"
   },
   "tauri": {

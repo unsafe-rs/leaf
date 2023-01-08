@@ -4,16 +4,16 @@
 )]
 
 mod delegate;
-mod macos;
 mod menu;
+mod setting;
 mod states;
+mod system;
 
 use log::LevelFilter;
 use tauri::SystemTray;
 use tauri_plugin_log::{LogTarget, LoggerBuilder};
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let mut app = tauri::Builder::default()
         .plugin(
             LoggerBuilder::default()
@@ -21,7 +21,7 @@ async fn main() {
                 .level(LevelFilter::Info)
                 .build(),
         )
-        .system_tray(SystemTray::new().with_menu(menu::default()))
+        .system_tray(SystemTray::new().with_menu(menu::build(Default::default())))
         .on_system_tray_event(menu::handle_event)
         .setup(delegate::setup)
         .invoke_handler(tauri::generate_handler![states::switch_mode_proxy,])

@@ -11,6 +11,7 @@ use memmap2::Mmap;
 
 use crate::app::SyncDnsClient;
 use crate::config;
+use crate::config::router;
 use crate::session::{Network, Session, SocksAddr};
 
 pub trait Condition: Send + Sync + Unpin {
@@ -166,7 +167,7 @@ struct PortMatcher {
 }
 
 impl PortMatcher {
-    fn new(port_ranges: &Vec<String>) -> Self {
+    fn new(port_ranges: &[String]) -> Self {
         let mut cond_or = ConditionOr::new();
         for pr in port_ranges.iter() {
             match PortRangeMatcher::new(pr) {
@@ -326,18 +327,18 @@ struct DomainMatcher {
 }
 
 impl DomainMatcher {
-    fn new(domains: &mut Vec<config::router::rule::Domain>) -> Self {
+    fn new(domains: &mut [router::rule::Domain]) -> Self {
         let mut cond_or = ConditionOr::new();
         for rr_domain in domains.iter_mut() {
             let filter = std::mem::take(&mut rr_domain.value);
             match rr_domain.type_.unwrap() {
-                config::router::rule::domain::Type::PLAIN => {
+                router::rule::domain::Type::PLAIN => {
                     cond_or.add(Box::new(DomainKeywordMatcher::new(filter)));
                 }
-                config::router::rule::domain::Type::DOMAIN => {
+                router::rule::domain::Type::DOMAIN => {
                     cond_or.add(Box::new(DomainSuffixMatcher::new(filter)));
                 }
-                config::router::rule::domain::Type::FULL => {
+                router::rule::domain::Type::FULL => {
                     cond_or.add(Box::new(DomainFullMatcher::new(filter)));
                 }
             }
@@ -412,34 +413,62 @@ impl Condition for ConditionOr {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde_derive::Serialize, serde_derive::Deserialize)]
+pub enum Mode {
+    Global,
+    Match,
+    Direct,
+}
+
+impl From<String> for Mode {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "GLOBAL" => Self::Global,
+            "DIRECT" => Self::Direct,
+            _ => Self::Match,
+        }
+    }
+}
+
+impl ToString for Mode {
+    fn to_string(&self) -> String {
+        match self {
+            Mode::Global => String::from("GLOBAL"),
+            Mode::Match => String::from("MATCH"),
+            Mode::Direct => String::from("DIRECT"),
+        }
+    }
+}
+
 pub struct Router {
     rules: Vec<Rule>,
     domain_resolve: bool,
     dns_client: SyncDnsClient,
+    mode: Mode,
 }
 
 impl Router {
-    fn load_rules(rules: &mut Vec<Rule>, routing_rules: &mut Vec<config::router::Rule>) {
+    fn load_rules(rules: &mut Vec<Rule>, routing_rules: &mut [router::Rule]) {
         let mut mmdb_readers: HashMap<String, Arc<maxminddb::Reader<Mmap>>> = HashMap::new();
         for rr in routing_rules.iter_mut() {
             let mut cond_and = ConditionAnd::new();
 
-            if rr.domains.len() > 0 {
+            if !rr.domains.is_empty() {
                 cond_and.add(Box::new(DomainMatcher::new(&mut rr.domains)));
             }
 
-            if rr.ip_cidrs.len() > 0 {
+            if !rr.ip_cidrs.is_empty() {
                 cond_and.add(Box::new(IpCidrMatcher::new(&mut rr.ip_cidrs)));
             }
 
-            if rr.mmdbs.len() > 0 {
+            if !rr.mmdbs.is_empty() {
                 for mmdb in rr.mmdbs.iter() {
                     let reader = match mmdb_readers.get(&mmdb.file) {
                         Some(r) => r.clone(),
                         None => match maxminddb::Reader::open_mmap(&mmdb.file) {
                             Ok(r) => {
                                 let r = Arc::new(r);
-                                mmdb_readers.insert((&mmdb.file).to_owned(), r.clone());
+                                mmdb_readers.insert(mmdb.file.to_owned(), r.clone());
                                 r
                             }
                             Err(e) => {
@@ -455,15 +484,15 @@ impl Router {
                 }
             }
 
-            if rr.port_ranges.len() > 0 {
+            if !rr.port_ranges.is_empty() {
                 cond_and.add(Box::new(PortMatcher::new(&rr.port_ranges)));
             }
 
-            if rr.networks.len() > 0 {
+            if !rr.networks.is_empty() {
                 cond_and.add(Box::new(NetworkMatcher::new(&mut rr.networks)));
             }
 
-            if rr.inbound_tags.len() > 0 {
+            if !rr.inbound_tags.is_empty() {
                 cond_and.add(Box::new(InboundTagMatcher::new(&mut rr.inbound_tags)));
             }
 
@@ -491,6 +520,7 @@ impl Router {
             rules,
             domain_resolve,
             dns_client,
+            mode: Mode::Match,
         }
     }
 
@@ -503,41 +533,53 @@ impl Router {
         Ok(())
     }
 
-    pub async fn pick_route<'a>(&'a self, sess: &'a Session) -> Result<&'a String> {
-        for rule in &self.rules {
-            if rule.apply(sess) {
-                return Ok(&rule.target);
-            }
-        }
-        if sess.destination.is_domain() && self.domain_resolve {
-            let ips = {
-                self.dns_client
-                    .read()
-                    .await
-                    .lookup(
-                        sess.destination
-                            .domain()
-                            .ok_or_else(|| anyhow!("illegal domain name"))?,
-                    )
-                    .map_err(|e| anyhow!("lookup {} failed: {}", sess.destination.host(), e))
-                    .await?
-            };
-            if !ips.is_empty() {
-                let mut new_sess = sess.clone();
-                new_sess.destination = SocksAddr::from((ips[0], sess.destination.port()));
-                log::trace!(
-                    "re-matching with resolved ip [{}] for [{}]",
-                    ips[0],
-                    sess.destination.host()
-                );
+    pub fn set_mode(&mut self, mode: Mode) {
+        self.mode = mode;
+    }
+
+    pub async fn pick_route<'a>(&'a self, sess: &'a Session) -> Result<String> {
+        match self.mode {
+            Mode::Global => Ok("GLOBAL".into()),
+            Mode::Direct => Ok(String::from("DIRECT")),
+            Mode::Match => {
                 for rule in &self.rules {
-                    if rule.apply(&new_sess) {
-                        return Ok(&rule.target);
+                    if rule.apply(sess) {
+                        return Ok(rule.target.clone());
                     }
                 }
+                if sess.destination.is_domain() && self.domain_resolve {
+                    let ips = {
+                        self.dns_client
+                            .read()
+                            .await
+                            .lookup(
+                                sess.destination
+                                    .domain()
+                                    .ok_or_else(|| anyhow!("illegal domain name"))?,
+                            )
+                            .map_err(|e| {
+                                anyhow!("lookup {} failed: {}", sess.destination.host(), e)
+                            })
+                            .await?
+                    };
+                    if !ips.is_empty() {
+                        let mut new_sess = sess.clone();
+                        new_sess.destination = SocksAddr::from((ips[0], sess.destination.port()));
+                        log::trace!(
+                            "re-matching with resolved ip [{}] for [{}]",
+                            ips[0],
+                            sess.destination.host()
+                        );
+                        for rule in &self.rules {
+                            if rule.apply(&new_sess) {
+                                return Ok(rule.target.clone());
+                            }
+                        }
+                    }
+                }
+                Err(anyhow!("no matching rules"))
             }
         }
-        Err(anyhow!("no matching rules"))
     }
 }
 
@@ -566,7 +608,7 @@ mod tests {
         };
 
         // test port range
-        let m = PortMatcher::new(&vec!["1024-5000".to_string(), "6000-7000".to_string()]);
+        let m = PortMatcher::new(&["1024-5000".to_string(), "6000-7000".to_string()]);
         sess.destination = SocksAddr::Domain("www.google.com".to_string(), 2000);
         assert!(m.apply(&sess));
         sess.destination = SocksAddr::Domain("www.google.com".to_string(), 5001);
@@ -575,7 +617,7 @@ mod tests {
         assert!(m.apply(&sess));
 
         // test single port range
-        let m = PortMatcher::new(&vec!["22-22".to_string()]);
+        let m = PortMatcher::new(&["22-22".to_string()]);
         sess.destination = SocksAddr::Domain("www.google.com".to_string(), 22);
         assert!(m.apply(&sess));
 

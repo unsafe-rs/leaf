@@ -59,6 +59,7 @@ pub struct OutboundManager {
     selectors: Arc<super::Selectors>,
     default_handler: Option<String>,
     abort_handles: Vec<AbortHandle>,
+    outbounds: Vec<Outbound>,
 }
 
 struct HandlerCacheEntry<'a> {
@@ -95,7 +96,7 @@ impl OutboundManager {
 
             // Check whether an identical one already exist.
             for e in cached_handlers.iter() {
-                if e.protocol == &outbound.protocol && e.settings == &outbound.settings {
+                if e.protocol == outbound.protocol && e.settings == &outbound.settings {
                     trace!("add handler [{}] cloned from [{}]", &tag, &e.tag);
                     handlers.insert(tag.clone(), e.handler.clone());
                     continue 'loop1;
@@ -406,12 +407,10 @@ impl OutboundManager {
                         }
                         let last_resort = if settings.last_resort.is_empty() {
                             None
+                        } else if let Some(a) = handlers.get(&settings.last_resort) {
+                            Some(a.clone())
                         } else {
-                            if let Some(a) = handlers.get(&settings.last_resort) {
-                                Some(a.clone())
-                            } else {
-                                continue 'outbounds;
-                            }
+                            continue 'outbounds;
                         };
                         let (stream, mut stream_abort_handles) = failover::StreamHandler::new(
                             actors.clone(),
@@ -699,13 +698,11 @@ impl OutboundManager {
         self.selectors = Arc::new(selectors);
         self.default_handler = default_handler;
         self.abort_handles = abort_handles;
+        self.outbounds = outbounds.to_owned();
         Ok(())
     }
 
-    pub fn new(
-        outbounds: &Vec<Outbound>,
-        dns_client: SyncDnsClient,
-    ) -> Result<Self> {
+    pub fn new(outbounds: &Vec<Outbound>, dns_client: SyncDnsClient) -> Result<Self> {
         let mut handlers: HashMap<String, AnyOutboundHandler> = HashMap::new();
         #[cfg(feature = "plugin")]
         let mut external_handlers = super::plugin::ExternalHandlers::new();
@@ -737,6 +734,7 @@ impl OutboundManager {
             selectors: Arc::new(selectors),
             default_handler,
             abort_handles,
+            outbounds: outbounds.to_owned(),
         })
     }
 

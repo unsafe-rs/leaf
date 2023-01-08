@@ -1,18 +1,19 @@
 use std::fs;
+use std::sync::Arc;
 use std::{error::Error, fs::create_dir_all, path::Path, sync::Mutex};
 
-use leaf::config::conf::{to_internal, Proxy, ProxyGroup, Rule};
-use leaf::config::json::{self, Log};
-use leaf::config::{self, conf::Config};
+use leaf::config::conf::{Proxy, ProxyGroup, Rule};
 use leaf::relay;
+use tauri::async_runtime::block_on;
 use tauri::{api::path::home_dir, App, Manager};
 
-use crate::states::UserSetting;
+use crate::states::CoreState;
+use crate::{menu, setting};
 
 pub(crate) fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     let dst = Path::new(&home_dir().unwrap())
         .join(".config")
-        .join("leafapp");
+        .join("leaf-bud");
     if !dst.is_dir() {
         create_dir_all(dst.clone())?;
     }
@@ -24,21 +25,26 @@ pub(crate) fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    std::env::set_var("ASSET_LOCATION", dst);
-
-    let defaults = app
+    if let Some(src) = app
         .path_resolver()
-        .resolve_resource("resources/default.json")
-        .unwrap_or_default();
-    let mut rmc = json::json_from_string(&fs::read_to_string(defaults)?)?;
-    let rm = relay::create(json::to_internal(&mut rmc)?)?;
+        .resolve_resource("resources/default.conf")
+    {
+        let dst = dst.join("bud.conf");
+        if !dst.exists() {
+            fs::copy(src, dst)?;
+        }
+    }
 
-    app.manage(UserSetting {
-        mode: Default::default(),
-        tun: Default::default(),
-        rm,
-        rmc: Mutex::new(rmc),
-        system_proxy: Default::default(),
+    std::env::set_var("ASSET_LOCATION", dst.clone());
+
+    let mut settings = setting::UserSettings::from_file(dst.join("bud.conf"))?;
+
+    let rm = relay::create(settings.clone().try_into()?)?;
+    app.tray_handle().set_menu(menu::build(settings.clone()))?;
+
+    app.manage(CoreState {
+        rm: Arc::new(rm),
+        settings: Arc::new(Mutex::new(settings)),
     });
     Ok(())
 }

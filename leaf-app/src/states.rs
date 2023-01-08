@@ -1,74 +1,76 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use leaf::{config::json, relay::RelayManager};
-use serde::{Deserialize, Serialize};
+use leaf::{app::router, relay::RelayManager};
 use tauri::{Manager, Result, Runtime};
 
-use crate::macos;
+use crate::{setting, system};
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy)]
-pub enum OutMode {
-    Proxy,
-    Match,
-    Direct,
-}
-
-impl Default for OutMode {
-    fn default() -> Self {
-        OutMode::Proxy
-    }
-}
-
-pub struct UserSetting {
-    pub mode: std::sync::Mutex<OutMode>,
-    pub tun: std::sync::Mutex<bool>,
-    pub system_proxy: std::sync::Mutex<bool>,
-    pub rm: RelayManager,
-    pub rmc: std::sync::Mutex<json::Config>,
+pub struct CoreState {
+    pub rm: Arc<RelayManager>,
+    pub settings: Arc<Mutex<setting::UserSettings>>,
 }
 
 #[tauri::command]
-pub fn switch_mode_proxy<R: Runtime>(app: tauri::AppHandle<R>, mode: OutMode) -> Result<()> {
-    let state = app.state::<UserSetting>();
-    *state.mode.lock().unwrap() = mode;
+pub async fn switch_mode_proxy<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    mode: router::Mode,
+) -> Result<()> {
+    let state = app.state::<CoreState>();
+    state.settings.lock().unwrap().outbound_mode = mode.to_string();
+    state.rm.route_manager().write().await.set_mode(mode);
 
     let h = app.tray_handle();
     h.get_item("mode_proxy")
-        .set_selected(mode == OutMode::Proxy)?;
+        .set_selected(mode == router::Mode::Global)?;
     h.get_item("mode_match")
-        .set_selected(mode == OutMode::Match)?;
+        .set_selected(mode == router::Mode::Match)?;
     h.get_item("mode_direct")
-        .set_selected(mode == OutMode::Direct)?;
+        .set_selected(mode == router::Mode::Direct)?;
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn toggle_tun_mode<R: Runtime>(app: tauri::AppHandle<R>) -> Result<()> {
-    let state = app.state::<UserSetting>();
-    let v = *state.tun.lock().unwrap();
-    *state.tun.lock().unwrap() = !v;
+    let state = app.state::<CoreState>();
+    let mut v = state.settings.lock().unwrap();
+    let on = v.inner.general.tun_auto.or(Some(false));
+    v.inner.general.tun_auto = Some(!on.unwrap_or(false));
 
     let h = app.tray_handle();
-    h.get_item("tun_mode").set_selected(v)?;
+    h.get_item("tun_mode")
+        .set_selected(v.inner.general.tun_auto.unwrap_or(false))?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn toggle_system_proxy<R: Runtime>(app: tauri::AppHandle<R>) -> Result<()> {
-    let state = app.state::<UserSetting>();
-    let is = (*state.system_proxy.lock().unwrap()).clone();
-    *state.system_proxy.lock().unwrap() = !is;
+    let state = app.state::<CoreState>();
+    let mut settings = state.settings.lock().unwrap();
+    settings.system_proxy = !settings.system_proxy;
 
-    // let general = (&state.rmc.lock().unwrap()).inbounds.unwrap_or_default().iter().find(|x| x.);
+    let http_port = settings.inner.general.http_port;
+    let socks_port = settings.inner.general.socks_port;
 
-    if !is {
-        macos::set_system_proxy(1087, 1086).expect("set system proxy failed");
+    if settings.system_proxy {
+        system::set_system_proxy(http_port, socks_port).expect("set system proxy failed");
     } else {
-        macos::unset_system_proxy().expect("unset system proxy failed");
+        system::unset_system_proxy().expect("unset system proxy failed");
     }
 
     app.tray_handle()
         .get_item("set_system_proxy")
-        .set_selected(!is)?;
+        .set_selected(settings.system_proxy)?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn switch_proxy<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    outbound: &str,
+    selected: &str,
+) -> Result<()> {
+    let state = app.state::<CoreState>();
+    state.rm.set_outbound_selected(outbound, selected);
     Ok(())
 }

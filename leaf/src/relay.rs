@@ -47,6 +47,10 @@ impl RelayManager {
         self.stat_manager.clone()
     }
 
+    pub fn route_manager(&self) -> Arc<RwLock<Router>> {
+        self.router.clone()
+    }
+
     pub async fn set_outbound_selected(&self, outbound: &str, select: &str) -> Result<(), Error> {
         if let Some(selector) = self.outbound_manager.read().await.get_selector(outbound) {
             selector
