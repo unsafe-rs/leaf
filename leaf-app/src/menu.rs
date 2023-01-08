@@ -1,6 +1,5 @@
 use leaf::app::router;
 use tauri::api::path::home_dir;
-use tauri::api::process::Command;
 use tauri::async_runtime::block_on;
 use tauri::{AppHandle, Manager, SystemTrayEvent};
 use tauri::{CustomMenuItem, SystemTrayMenu, SystemTrayMenuItem, SystemTraySubmenu};

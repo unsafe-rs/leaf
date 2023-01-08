@@ -2,9 +2,7 @@ use std::fs;
 use std::sync::Arc;
 use std::{error::Error, fs::create_dir_all, path::Path, sync::Mutex};
 
-use leaf::config::conf::{Proxy, ProxyGroup, Rule};
 use leaf::relay;
-use tauri::async_runtime::block_on;
 use tauri::{api::path::home_dir, App, Manager};
 
 use crate::states::CoreState;
@@ -37,7 +35,7 @@ pub(crate) fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
 
     std::env::set_var("ASSET_LOCATION", dst.clone());
 
-    let mut settings = setting::UserSettings::from_file(dst.join("bud.conf"))?;
+    let settings = setting::UserSettings::from_file(dst.join("bud.conf"))?;
 
     let rm = relay::create(settings.clone().try_into()?)?;
     app.tray_handle().set_menu(menu::build(settings.clone()))?;
